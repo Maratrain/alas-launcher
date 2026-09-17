@@ -189,3 +189,54 @@ GitHub Actions（`.github/workflows/package.yml`）：
 - 后端连接检查超时：500 毫秒
 - 通知流断线重连间隔：3 秒
 - `UV_PYTHON_INSTALL_MIRROR` 默认使用 npmmirror 加速 Python standalone 下载，并以 python-standalone.org 作为备用源
+
+## ⚠️ 本机环境的两个陷阱（动手前必读）
+
+这两条都是在这台机器上**真实发生过**的问题，不是理论风险。
+
+### 1. `.git/refs/heads/` 下的分支引用会自己消失
+
+`printf` 手写的引用写完当下有效，但**几十秒内会被删掉**；`git update-ref` 甚至完全不落盘。
+症状是：
+
+```
+$ git status
+fatal: your current branch 'refactor/gh-releases' does not have any commits yet
+$ git rev-parse HEAD
+fatal: ambiguous argument 'HEAD': unknown revision
+$ find .git/refs -type f
+.git/refs/tags/3.0.0            # 只剩 remotes/ 和 tags/，heads/ 是空的
+```
+
+提交对象本身完好 —— `git cat-file -t <sha>` 仍能正常返回 `commit`。
+
+**HEAD 失效时绝对不要 `git commit`**：git 会把它当成 **initial commit**，生成一个
+**无父的根提交**（实测产生了 `d5636aa6`）；`git commit -- <paths>` 还会顺手把索引
+搞成"所有文件都是 A"的状态。
+
+**恢复：改用 detached HEAD，绕开 `refs/heads`**
+
+```bash
+tail -5 .git/logs/HEAD                    # 1. reflog 里找最后一条 commit 的 SHA
+printf '%s\n' <40位SHA> > .git/HEAD       # 2. HEAD 文件在 .git/ 根目录，不受影响
+git reset --mixed                         # 3. 重建索引
+git status                                #    应恢复干净
+```
+
+之后再补 `refs/heads/<branch>` 也可以，但**它随时可能再次消失，属正常现象**，
+不要因此重复折腾或 force push。判断远端状态一律用
+`git ls-remote <url> refs/heads/<branch> 2>/dev/null`。
+
+### 2. 同一个工作树可能同时被多个 Agent / 进程操作
+
+已实际发生：同一段改动在几分钟内出现了**两条平行历史**
+（`772c27c → 73a1ce5 → 678c634b` 与 `d0d68a2 → 00e71d2 → fea7571`，两者树只差
+`updata/stable.json`），并且 `build.rs` / `tauri.conf.json` / `Info.plist` 被身份不明的改动改过。
+
+对应的纪律：
+
+- **开工前先确认 HEAD 到底是哪个提交**（`git status` + `git log --oneline -3`），不要凭上一轮的记忆。
+- **改完立刻提交**，并且只用 `git add <明确路径>`，禁止 `git add -A`。
+- 工作区出现自己没做过的改动时**先停下确认**，不要顺手提交或回退。
+- 推送前用 `git ls-remote` 核对远端 tip；本机 `git fetch` 不会更新 `refs/remotes/origin/*`。
+- 出现线性无关的历史时，选**直接压在远端 main 之上**的那条（推送是快进，不用 force）。
