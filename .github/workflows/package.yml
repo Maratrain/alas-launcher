@@ -44,6 +44,9 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: ${{ env.UV_VERSION }}
+          # 启动器仓库不是 Python 项目（没有 uv.lock），依赖缓存没有可用的失效依据，
+          # setup-uv 会因此报 "The cache will never be invalidated" 警告。直接关掉。
+          enable-cache: false
       - name: Prepare version from tag or input
         shell: python
         env:
