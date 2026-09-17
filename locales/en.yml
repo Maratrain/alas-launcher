@@ -90,6 +90,8 @@ launcher_update:
   invalid_manifest_version: "The update server returned an invalid launcher version: %{version}"
   mini_update_missing: "The mini launcher must update to the full launcher first, but the update server did not return a newer version. Current: %{current}, latest: %{latest}"
   payload_missing: "A launcher update is required, but no package was provided for %{platform}."
+  skipped_title: "Skipped the launcher update check"
+  skipped_detail: "Could not check for launcher updates, continuing startup.\n\n%{error}"
 
 dialog:
   cleaning_env: "Cleaning environment"
@@ -219,3 +221,13 @@ tips:
   16: "Eagle Union's party is all set, just waiting for you, Commander."
   17: "Sakura Empire's cherry blossoms have fallen, but our fight has just begun."
   18: "Iron Blood's technology is the best in the world!"
+
+cleanup_choice:
+  title: "This launch did not finish"
+  body: "AzurPilot was closed before setup finished. This usually just means the network was slow or the update took a while - your existing runtime is very likely fine."
+  warn: "Resetting the environment deletes .venv and clears the uv cache, so the next launch will re-download Python and every dependency. That can take minutes to tens of minutes."
+  exit: "Just exit (recommended)"
+  exit_detail: "Deletes nothing; the next launch reuses the current environment"
+  reset: "Reset the environment, then exit"
+  reset_detail: "Deletes .venv and clears the uv cache; the next launch re-downloads"
+  manual: "You can also double-click 重置環境.bat / 重置环境.bat in the AzurPilot folder to reset manually at any time."

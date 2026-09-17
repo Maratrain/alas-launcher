@@ -2,11 +2,12 @@ Deploy:
   Git:
     # AzurPilot 仓库地址
     # URL of AzurPilot repository
-    # [国内用户] 使用 'git://git.pull/AzurPilot' 获得更快更稳定的下载
-    # [CN user] Use 'git://git.pull/AzurPilot' for faster and more stable download
-    # [其他用户] 使用 'https://github.com/wess09/AzurPilot'
-    # [Other] Use 'https://github.com/wess09/AzurPilot'
-    Repository: git://git.pull/AzurPilot
+    # 填 'auto' = 启动时按网络所在地区自动选择更新源：
+    #   中国大陆 -> https://gitcode.com/gcw_BYvq9jGu/AzurPilot
+    #   其他地区 -> https://github.com/changqing81/Azurpilot-Auto
+    # 填具体地址则表示锁定该地址，不会被自动改写。
+    # 'auto' picks the source by region; a concrete URL locks it.
+    Repository: auto
     # AzurPilot 分支
     # Branch of AzurPilot
     # [开发者] 使用 'dev'、'app' 等分支体验新功能

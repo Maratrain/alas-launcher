@@ -32,6 +32,8 @@ pub struct SplashUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uv_progress: Option<UvProgress>,
     pub is_error: bool,
+    /// 为 true 时，启动画面会弹出「本次启动未完成」的二选一对话框。
+    pub cleanup_choice: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -49,6 +51,7 @@ impl SplashUpdate {
             progress: progress.min(100),
             uv_progress: None,
             is_error: false,
+            cleanup_choice: false,
         }
     }
 
@@ -60,6 +63,23 @@ impl SplashUpdate {
             progress: progress.min(100),
             uv_progress: None,
             is_error: true,
+            cleanup_choice: false,
+        }
+    }
+
+    /// 在启动画面上弹出「本次启动未完成」的二选一对话框。
+    ///
+    /// 默认选项是「直接退出」——什么都不删。只有用户明确选择「重置环境后退出」
+    /// 时才会调用清理逻辑，避免"环境本来是好的，只是这次启动慢"被误清。
+    pub fn cleanup_choice(title: impl Into<String>, detail: impl Into<String>, progress: u8) -> Self {
+        Self {
+            subtitle: t!("setup.connecting").to_string(),
+            title: title.into(),
+            detail: detail.into(),
+            progress: progress.min(100),
+            uv_progress: None,
+            is_error: false,
+            cleanup_choice: true,
         }
     }
 
@@ -1090,11 +1110,73 @@ gm.git_install()
     )
 }
 
+/// 文件的轻量指纹：(大小, 修改时间)。
+fn file_stamp(path: &Path) -> String {
+    match fs::metadata(path) {
+        Ok(meta) => {
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_secs())
+                .unwrap_or(0);
+            format!("{}-{}", meta.len(), modified)
+        }
+        Err(_) => "missing".to_owned(),
+    }
+}
+
+/// `uv sync` 的快速路径指纹。
+///
+/// 记录 uv.lock / pyproject.toml 的指纹、venv 里的 Python 版本、以及 uv 二进制
+/// 的指纹。四者全部不变时说明依赖没有变化，可以直接跳过 `uv sync`，
+/// 连带跳过后面的 PyPI 镜像探测 —— 这是启动提速最关键的一步。
+///
+/// 指纹全部取自文件元数据，不需要读取文件内容，判定成本可以忽略。
+fn environment_fingerprint(bootstrap_uv: &Path) -> String {
+    let python = venv_python_version()
+        .map(|(major, minor, patch)| format!("{major}.{minor}.{patch}"))
+        .unwrap_or_else(|| "none".to_owned());
+    format!(
+        "uv.lock={}|pyproject.toml={}|python={}|uv={}",
+        file_stamp(Path::new("uv.lock")),
+        file_stamp(Path::new("pyproject.toml")),
+        python,
+        file_stamp(bootstrap_uv),
+    )
+}
+
+fn env_stamp_path() -> PathBuf {
+    venv_dir().join(".alas-env-stamp.json")
+}
+
+/// 依赖环境是否与上次同步时完全一致（一致则无需再跑 uv sync）。
+///
+/// 指纹文件本身放在 .venv 里：一旦 .venv 被删或重建，指纹自然失效，会走完整流程。
+fn environment_is_synced(bootstrap_uv: &Path) -> bool {
+    let Ok(cached) = fs::read_to_string(env_stamp_path()) else {
+        return false;
+    };
+    if cached.trim() != environment_fingerprint(bootstrap_uv) {
+        return false;
+    }
+    if !venv_python().exists() {
+        return false;
+    }
+    info!("Dependency fingerprint unchanged, skipping uv sync");
+    true
+}
+
 fn uv_sync_project(
     mut status_updater: impl FnMut(SplashUpdate),
     bootstrap_uv: &Path,
     cancel_requested: &AtomicBool,
 ) -> Result<()> {
+    if environment_is_synced(bootstrap_uv) {
+        return Ok(());
+    }
+
+    let fingerprint = environment_fingerprint(bootstrap_uv);
     let bootstrap_uv = bootstrap_uv.to_path_buf();
     let indexes = ranked_pypi_indexes();
     let mut last_error = None;
@@ -1114,7 +1196,11 @@ fn uv_sync_project(
             ScriptPhase::Dependencies,
             cancel_requested,
         ) {
-            Ok(()) => return Ok(()),
+            Ok(()) => {
+                // 记下指纹，下次启动即可走快速路径。
+                let _ = fs::write(env_stamp_path(), &fingerprint);
+                return Ok(());
+            }
             Err(err) => {
                 warn!("Dependency sync failed with PyPI index {index}: {err}");
                 last_error = Some(err);
@@ -1519,6 +1605,11 @@ fn ensure_deploy_python_dependencies(
     cancel_requested: &AtomicBool,
     mut status_updater: impl FnMut(SplashUpdate),
 ) -> Result<()> {
+    // 依赖没变时连 import 自检都跳过：省掉一次 Python 进程冷启动。
+    if environment_is_synced(bootstrap_uv) {
+        return Ok(());
+    }
+
     status_updater(runtime_tools_update(
         t!("setup.preparing_env"),
         t!("setup.checking_requests"),
@@ -1584,6 +1675,8 @@ fn uv_python_env(cmd: &mut Command) {
 
 fn uv_python_env_with_install_dir(cmd: &mut Command, python_install_dir: &Path) {
     cmd.env("UV_NO_PROGRESS", "1")
+        // 关掉 uv 自身的"检查新版本"联网请求，避免每次启动都白等一个网络往返。
+        .env("UV_NO_UPDATE_CHECK", "1")
         .env_remove("UV_PYTHON")
         .env("UV_PYTHON_INSTALL_DIR", python_install_dir);
     isolate_python_child_environment(cmd);
@@ -1828,8 +1921,17 @@ fn copy_file_if_exists(from: &Path, to: &Path) -> Result<()> {
     if !from.exists() {
         return Ok(());
     }
-    if to.exists() && files_match(from, to).unwrap_or(false) {
-        return Ok(());
+    if to.exists() {
+        // 快速路径：体积相同即视为同一个文件，跳过内容比对。
+        // 内嵌的 uv / adb / git 都是几十 MB，每次启动全量读一遍纯属白费时间；
+        // 同一版本的二进制体积相同，体积不同才需要真正拷贝。
+        let same_size = match (fs::metadata(from), fs::metadata(to)) {
+            (Ok(source), Ok(target)) => source.len() == target.len(),
+            _ => false,
+        };
+        if same_size || files_match(from, to).unwrap_or(false) {
+            return Ok(());
+        }
     }
     if let Some(parent) = to.parent() {
         fs::create_dir_all(parent).with_context(|| {

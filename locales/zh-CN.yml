@@ -90,6 +90,8 @@ launcher_update:
   invalid_manifest_version: "更新服务器返回了无效的启动器版本：%{version}"
   mini_update_missing: "迷你版启动器必须先更新为完整版，但更新服务器没有返回更高版本。当前版本：%{current}，最新版本：%{latest}"
   payload_missing: "启动器必须更新，但更新服务器没有提供 %{platform} 的安装包。"
+  skipped_title: "已跳过启动器更新检查"
+  skipped_detail: "无法检查启动器更新，本次直接继续启动。\n\n%{error}"
 
 dialog:
   cleaning_env: "正在清理环境"
@@ -219,3 +221,13 @@ tips:
   16: "白鹰的派对已经准备就绪，就等指挥官了。"
   17: "重樱的樱花落了，但我们的奋斗才刚开始。"
   18: "铁血的科技世界第一！"
+
+cleanup_choice:
+  title: "本次启动未完成"
+  body: "AzurPilot 还没启动完成就退出了。这通常只是网络较慢或更新耗时较长，你现有的运行环境很可能没有问题。"
+  warn: "重置环境会删除 .venv 并清空 uv 缓存，下次启动需要重新下载 Python 和全部依赖，可能要等几分钟到几十分钟。"
+  exit: "直接退出（推荐）"
+  exit_detail: "什么都不删，下次打开继续用现有环境"
+  reset: "重置环境后退出"
+  reset_detail: "删除 .venv 并清空 uv 缓存，下次重新下载"
+  manual: "也可以在 AzurPilot 目录下双击「重置环境.bat」随时手动重置。"

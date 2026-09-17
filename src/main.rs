@@ -90,8 +90,10 @@ const TIME_BOMB_CONFIG_SOURCE: &str = include_str!("../Cargo.toml");
 #[cfg(test)]
 const TAURI_CONFIG_SOURCE: &str = include_str!("../tauri.conf.json");
 const LAUNCHER_UPDATE_URL: &str = env!("LAUNCHER_UPDATE_URL");
+// 兜底清单地址：主地址（release 资产）取不到时再试这个。
+// 由 CI 在发版时把 stable.json 一并提交回 main 分支，作为冗余通路。
 const LAUNCHER_UPDATE_FALLBACK_URL: &str =
-    "https://ap.launcher-update.nanoda.work/updata/stable.json";
+    "https://raw.githubusercontent.com/changqing81/alas-launcher/main/updata/stable.json";
 const LAUNCHER_UPDATE_SKIP_ENV: &str = "AZURPILOT_SKIP_LAUNCHER_UPDATE";
 const MINI_LAUNCHER_VERSION: &str = "0.0.1";
 const LAUNCHER_UPDATE_MTLS_IDENTITY: &[u8] =
@@ -258,6 +260,42 @@ fn tray_icon_for_platform() -> Image<'static> {
     })
 }
 
+// ---------------------------------------------------------------------------
+// 启动未完成时的「清理环境」二选一
+//
+// 旧行为：只要启动没走完就退出，就直接清空整个仓库目录（除少数几个文件夹），
+// 下次启动要重新下载 Python 和全部依赖。问题在于"环境本来是好的、只是这次
+// 网络慢"也会被清掉。现在改成把选择权交给用户：
+//   ① 直接退出（默认）—— 什么都不删
+//   ② 重置环境后退出 —— 删除 .venv 并清空 uv 缓存
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum CleanupChoice {
+    Exit,
+    Reset,
+}
+
+static CLEANUP_CHOICE: std::sync::Mutex<Option<CleanupChoice>> = std::sync::Mutex::new(None);
+
+fn take_cleanup_choice() -> Option<CleanupChoice> {
+    CLEANUP_CHOICE.lock().ok().and_then(|mut guard| guard.take())
+}
+
+/// 启动画面上的二选一对话框提交选择后回调本命令。
+#[tauri::command]
+fn splash_cleanup_choice(choice: String) {
+    let value = if choice == "reset" {
+        CleanupChoice::Reset
+    } else {
+        CleanupChoice::Exit
+    };
+    info!("User picked startup cleanup choice: {choice}");
+    if let Ok(mut guard) = CLEANUP_CHOICE.lock() {
+        *guard = Some(value);
+    }
+}
+
 fn begin_startup_cleanup(
     app_handle: tauri::AppHandle,
     allow_exit: Arc<AtomicBool>,
@@ -273,53 +311,77 @@ fn begin_startup_cleanup(
     }
 
     setup_cancel_requested.store(true, Ordering::SeqCst);
+
+    // 先把决定权交给用户：默认什么都不删。
+    if let Ok(mut guard) = CLEANUP_CHOICE.lock() {
+        *guard = None;
+    }
     if let Some(splash) = app_handle.get_webview_window("splash") {
+        let _ = reveal_window(&splash);
         update_splash(
             &splash,
-            &SplashUpdate::loading(
-                t!("dialog.cleaning_env"),
-                t!("dialog.cleaning_env_detail"),
+            &SplashUpdate::cleanup_choice(
+                t!("cleanup_choice.title"),
+                t!("cleanup_choice.body"),
                 99,
-            )
-            .with_subtitle(t!("dialog.cleaning_wait")),
+            ),
         );
     }
 
-    app_handle
-        .dialog()
-        .message(t!("dialog.cleaning_message"))
-        .title(t!("dialog.cleaning_env"))
-        .show(|_| {});
-
     thread::spawn(move || {
+        // 刻意不因为 setup_running 变 false 就提前结束等待：
+        // 上面刚发出的取消请求会让初始化线程很快收尾，但我们仍需要用户做出选择。
+        debug!(
+            "Waiting for cleanup choice (setup_running={})",
+            setup_running.load(Ordering::SeqCst)
+        );
+
         let started_at = Instant::now();
-        while setup_running.load(Ordering::SeqCst) && started_at.elapsed() < Duration::from_secs(30)
-        {
-            thread::sleep(Duration::from_millis(100));
-        }
-
-        if setup_running.load(Ordering::SeqCst) {
-            warn!("Setup thread did not stop before startup cleanup timeout");
-        }
-
-        match cleanup_runtime_for_rebuild() {
-            Ok(()) => {
-                info!("Startup cleanup finished; runtime will be rebuilt on next launch");
+        let mut choice = None;
+        while started_at.elapsed() < Duration::from_secs(180) {
+            if let Some(value) = take_cleanup_choice() {
+                choice = Some(value);
+                break;
             }
-            Err(e) => {
-                error!("Startup cleanup failed: {:?}", e);
+            thread::sleep(Duration::from_millis(120));
+        }
+
+        match choice {
+            Some(CleanupChoice::Reset) => {
                 if let Some(splash) = app_handle.get_webview_window("splash") {
                     update_splash(
                         &splash,
-                        &SplashUpdate::error(
-                            t!("dialog.cleanup_failed"),
-                            t!("dialog.cleanup_failed_detail", error = format!("{e:#}")),
+                        &SplashUpdate::loading(
+                            t!("dialog.cleaning_env"),
+                            t!("dialog.cleaning_env_detail"),
                             99,
-                        ),
+                        )
+                        .with_subtitle(t!("dialog.cleaning_wait")),
                     );
                 }
-                startup_cleanup_started.store(false, Ordering::SeqCst);
-                return;
+                match cleanup_runtime_for_rebuild() {
+                    Ok(()) => {
+                        info!("Runtime cleaned at user request; it will be rebuilt on next launch");
+                    }
+                    Err(e) => {
+                        error!("User-requested runtime cleanup failed: {:?}", e);
+                        if let Some(splash) = app_handle.get_webview_window("splash") {
+                            update_splash(
+                                &splash,
+                                &SplashUpdate::error(
+                                    t!("dialog.cleanup_failed"),
+                                    t!("dialog.cleanup_failed_detail", error = format!("{e:#}")),
+                                    99,
+                                ),
+                            );
+                        }
+                        startup_cleanup_started.store(false, Ordering::SeqCst);
+                        return;
+                    }
+                }
+            }
+            _ => {
+                info!("Startup cleanup skipped; runtime left untouched");
             }
         }
 
@@ -2022,7 +2084,8 @@ fn main() -> Result<()> {
             window_close,
             window_exit_application,
             window_start_dragging,
-            window_is_maximized
+            window_is_maximized,
+            splash_cleanup_choice
         ])
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
@@ -2224,21 +2287,18 @@ fn main() -> Result<()> {
                                 }
                                 Ok(false) => {}
                                 Err(e) => {
-                                    warn!("Required launcher update failed: {e:#}");
-                                    if start_minimized {
-                                        let _ = reveal_window(&splash);
-                                    }
-                                    launcher_status_updater(SplashUpdate::error(
-                                        t!("launcher_update.failed"),
+                                    // 自更新失败不再中断启动。服务器不可达、清单 404、
+                                    // 网络受限，都只应该意味着"这次收不到新版本"，
+                                    // 而不该让用户打不开程序。记日志 + 在启动画面上提示后继续。
+                                    warn!("Launcher update check failed, continuing startup: {e:#}");
+                                    launcher_status_updater(SplashUpdate::loading(
+                                        t!("launcher_update.skipped_title"),
                                         t!(
-                                            "launcher_update.failed_detail",
+                                            "launcher_update.skipped_detail",
                                             error = format!("{e:#}")
                                         ),
                                         launcher_progress.get().max(8),
                                     ));
-                                    setup_completed.store(true, Ordering::SeqCst);
-                                    setup_running.store(false, Ordering::SeqCst);
-                                    return;
                                 }
                             }
                         }
@@ -3396,6 +3456,14 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
         "preparingLog": t!("splash.preparing_log"),
         "logSavedPrefix": t!("splash.log_saved_prefix"),
         "logFailed": t!("splash.log_failed"),
+        "cleanupChoiceTitle": t!("cleanup_choice.title"),
+        "cleanupChoiceBody": t!("cleanup_choice.body"),
+        "cleanupChoiceWarn": t!("cleanup_choice.warn"),
+        "cleanupChoiceExit": t!("cleanup_choice.exit"),
+        "cleanupChoiceExitDetail": t!("cleanup_choice.exit_detail"),
+        "cleanupChoiceReset": t!("cleanup_choice.reset"),
+        "cleanupChoiceResetDetail": t!("cleanup_choice.reset_detail"),
+        "cleanupChoiceManual": t!("cleanup_choice.manual"),
     });
     let i18n_json = to_string(&i18n).unwrap();
 
@@ -3947,6 +4015,136 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
     </div>
   </div>
 
+  <style>
+    #alas-cleanup-choice {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(0, 0, 0, 0.52);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+    }
+    #alas-cleanup-choice.is-open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #alas-cleanup-choice-card {
+      width: min(430px, 100%);
+      padding: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 18px;
+      background: rgba(22, 25, 31, 0.92);
+      box-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(18px) saturate(1.25);
+      -webkit-backdrop-filter: blur(18px) saturate(1.25);
+      color: #fff;
+      transform: translateY(-14px) scale(0.94);
+      transition: transform 220ms cubic-bezier(0.2, 0.9, 0.25, 1);
+    }
+    #alas-cleanup-choice.is-open #alas-cleanup-choice-card {
+      transform: translateY(0) scale(1);
+    }
+    #alas-cleanup-choice-title {
+      margin: 0 0 10px;
+      font: 500 15px/1.45 "MiSans", sans-serif;
+      color: #fff;
+    }
+    #alas-cleanup-choice-body {
+      margin: 0 0 10px;
+      font: 400 12.5px/1.7 "MiSans", sans-serif;
+      color: rgba(255, 255, 255, 0.82);
+    }
+    #alas-cleanup-choice-warn {
+      margin: 0 0 14px;
+      padding: 9px 11px;
+      border-left: 2px solid #ffbd2e;
+      border-radius: 8px;
+      background: rgba(255, 189, 46, 0.12);
+      font: 400 11.5px/1.65 "MiSans", sans-serif;
+      color: rgba(255, 224, 160, 0.95);
+    }
+    #alas-cleanup-choice-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #alas-cleanup-choice button {
+      display: block;
+      width: 100%;
+      margin: 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      text-align: left;
+      cursor: pointer;
+      transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
+    }
+    #alas-cleanup-choice button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.18);
+    }
+    #alas-cleanup-choice button:disabled {
+      opacity: 0.55;
+      cursor: default;
+      transform: none;
+    }
+    #alas-cleanup-choice button .choice-label {
+      display: block;
+      font: 500 12.5px/1.5 "MiSans", sans-serif;
+    }
+    #alas-cleanup-choice button .choice-sub {
+      display: block;
+      margin-top: 2px;
+      font: 400 11.5px/1.5 "MiSans", sans-serif;
+      color: rgba(255, 255, 255, 0.55);
+    }
+    #alas-cleanup-choice-exit {
+      border-color: rgba(79, 172, 254, 0.5);
+      background: rgba(79, 172, 254, 0.16);
+    }
+    #alas-cleanup-choice-exit:hover:not(:disabled) {
+      background: rgba(79, 172, 254, 0.26);
+    }
+    #alas-cleanup-choice-reset {
+      border-color: rgba(255, 113, 106, 0.35);
+      background: rgba(202, 56, 52, 0.24);
+    }
+    #alas-cleanup-choice-reset:hover:not(:disabled) {
+      background: rgba(202, 56, 52, 0.4);
+    }
+    #alas-cleanup-choice-manual {
+      margin: 12px 0 0;
+      font: 400 11px/1.6 "MiSans", sans-serif;
+      color: rgba(255, 255, 255, 0.42);
+    }
+  </style>
+
+  <div id="alas-cleanup-choice" role="dialog" aria-modal="true" aria-hidden="true">
+    <div id="alas-cleanup-choice-card">
+      <p id="alas-cleanup-choice-title"></p>
+      <p id="alas-cleanup-choice-body"></p>
+      <p id="alas-cleanup-choice-warn"></p>
+      <div id="alas-cleanup-choice-actions">
+        <button id="alas-cleanup-choice-exit" type="button">
+          <span class="choice-label"></span>
+          <span class="choice-sub"></span>
+        </button>
+        <button id="alas-cleanup-choice-reset" type="button">
+          <span class="choice-label"></span>
+          <span class="choice-sub"></span>
+        </button>
+      </div>
+      <p id="alas-cleanup-choice-manual"></p>
+    </div>
+  </div>
+
   <script>
     const i18n = $I18N_JSON;
     const defaultTip = i18n.defaultTip;
@@ -3993,6 +4191,12 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
       const progressMeta = document.getElementById('progress-meta');
       const splashActions = document.getElementById('splash-actions');
       const subtitle = splitSubtitle(payload.subtitle);
+
+      // 启动未完成就被关掉时，弹出「直接退出 / 重置环境」二选一，
+      // 不再自动清空运行环境。
+      if (payload.cleanup_choice && window.__ALAS_SHOW_CLEANUP_CHOICE) {
+        window.__ALAS_SHOW_CLEANUP_CHOICE();
+      }
 
       badgeText.textContent = payload.is_error ? i18n.errorBadge : subtitle.status;
       document.getElementById('tip-text').textContent = 'Tips: ' + subtitle.tip;
@@ -4088,6 +4292,49 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
         button.disabled = false;
       }
     });
+
+    const cleanupChoice = document.getElementById('alas-cleanup-choice');
+    const cleanupChoiceExit = document.getElementById('alas-cleanup-choice-exit');
+    const cleanupChoiceReset = document.getElementById('alas-cleanup-choice-reset');
+    let cleanupChoiceWired = false;
+    window.__ALAS_SHOW_CLEANUP_CHOICE = function () {
+      if (!cleanupChoice || !cleanupChoiceExit || !cleanupChoiceReset) {
+        return;
+      }
+      document.getElementById('alas-cleanup-choice-title').textContent = i18n.cleanupChoiceTitle || '';
+      document.getElementById('alas-cleanup-choice-body').textContent = i18n.cleanupChoiceBody || '';
+      document.getElementById('alas-cleanup-choice-warn').textContent = i18n.cleanupChoiceWarn || '';
+      document.getElementById('alas-cleanup-choice-manual').textContent = i18n.cleanupChoiceManual || '';
+      cleanupChoiceExit.querySelector('.choice-label').textContent = i18n.cleanupChoiceExit || '';
+      cleanupChoiceExit.querySelector('.choice-sub').textContent = i18n.cleanupChoiceExitDetail || '';
+      cleanupChoiceReset.querySelector('.choice-label').textContent = i18n.cleanupChoiceReset || '';
+      cleanupChoiceReset.querySelector('.choice-sub').textContent = i18n.cleanupChoiceResetDetail || '';
+
+      if (!cleanupChoiceWired) {
+        cleanupChoiceWired = true;
+        const submit = async choice => {
+          // 重置环境是不可逆操作，先二次确认
+          if (choice === 'reset' && !window.confirm(i18n.cleanupChoiceWarn || '')) {
+            return;
+          }
+          cleanupChoiceExit.disabled = true;
+          cleanupChoiceReset.disabled = true;
+          try {
+            await invoke('splash_cleanup_choice', { choice: choice });
+          } catch (error) {
+            console.error('Failed to submit cleanup choice', error);
+            cleanupChoiceExit.disabled = false;
+            cleanupChoiceReset.disabled = false;
+          }
+        };
+        cleanupChoiceExit.addEventListener('click', () => submit('exit'));
+        cleanupChoiceReset.addEventListener('click', () => submit('reset'));
+      }
+
+      cleanupChoice.classList.add('is-open');
+      cleanupChoice.setAttribute('aria-hidden', 'false');
+      cleanupChoiceExit.focus({ preventScroll: true });
+    };
 
     window.__ALAS_SPLASH_READY = true;
   </script>

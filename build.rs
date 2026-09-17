@@ -5,8 +5,12 @@ use base64::{prelude::BASE64_STANDARD, Engine};
 const MTLS_IDENTITY_ENV: &str = "ALAS_LAUNCHER_MTLS_IDENTITY_PEM_B64";
 const REQUIRE_MTLS_ENV: &str = "REQUIRE_LAUNCHER_MTLS_IDENTITY";
 const LAUNCHER_UPDATE_URL_ENV: &str = "LAUNCHER_UPDATE_URL";
+// 启动器自更新清单地址。指向自有仓库的 GitHub Release。
+// releases/latest/download/ 的语义是「最新正式发布的那个版本」，URL 永久不变，
+// 而清单内容随每个 tag 更新 —— 正好满足「编译进二进制的地址必须固定」的要求。
+// 每次发版必须确保 stable.json 已作为 release 资产上传，否则这里会 404。
 const DEFAULT_LAUNCHER_UPDATE_URL: &str =
-    "https://ap-launcher-update.nanoda.work/updata/stable.json";
+    "https://github.com/changqing81/alas-launcher/releases/latest/download/stable.json";
 
 fn main() {
     let windows = tauri_build::WindowsAttributes::new().app_manifest(

@@ -90,6 +90,8 @@ launcher_update:
   invalid_manifest_version: "更新伺服器傳回了無效的啟動器版本：%{version}"
   mini_update_missing: "迷你版啟動器必須先更新為完整版，但更新伺服器沒有返回更高版本。目前版本：%{current}，最新版本：%{latest}"
   payload_missing: "啟動器必須更新，但更新伺服器沒有提供 %{platform} 的安裝包。"
+  skipped_title: "已略過啟動器更新檢查"
+  skipped_detail: "無法檢查啟動器更新，本次直接繼續啟動。\n\n%{error}"
 
 dialog:
   cleaning_env: "正在清理環境"
@@ -219,3 +221,13 @@ tips:
   16: "白鷹的派對已經準備就緒，就等指揮官了。"
   17: "重櫻的櫻花落了，但我們的奮鬥才剛開始。"
   18: "鐵血的科技世界第一！"
+
+cleanup_choice:
+  title: "本次啟動未完成"
+  body: "AzurPilot 還沒啟動完成就結束了。這通常只是網路較慢或更新耗時較長，你現有的執行環境很可能沒有問題。"
+  warn: "重置環境會刪除 .venv 並清空 uv 快取，下次啟動需要重新下載 Python 和全部相依套件，可能要等幾分鐘到幾十分鐘。"
+  exit: "直接結束（建議）"
+  exit_detail: "什麼都不刪，下次開啟繼續用現有環境"
+  reset: "重置環境後結束"
+  reset_detail: "刪除 .venv 並清空 uv 快取，下次重新下載"
+  manual: "也可以在 AzurPilot 目錄下雙擊「重置環境.bat」隨時手動重置。"

@@ -145,9 +145,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Build
         env:
-          ALAS_LAUNCHER_MTLS_IDENTITY_PEM_B64: ${{ secrets.ALAS_LAUNCHER_MTLS_IDENTITY_PEM_B64 }}
-          REQUIRE_LAUNCHER_MTLS_IDENTITY: "1"
-          LAUNCHER_UPDATE_URL: https://ap-launcher-update.nanoda.work/updata/stable.json
+          LAUNCHER_UPDATE_URL: https://github.com/changqing81/alas-launcher/releases/latest/download/stable.json
         run: cargo build --verbose --release
       - name: Get git
         uses: knicknic/os-specific-run@v1.0.3
@@ -212,7 +210,7 @@ jobs:
             tar -xvf adb.zip
       - name: Get AzurPilot
         run: |
-          git clone --depth=1 --filter=blob:none --sparse https://github.com/wess09/AzurPilot.git AzurLaneAutoScript
+          git clone --depth=1 --filter=blob:none --sparse --branch master https://github.com/changqing81/Azurpilot-Auto.git AzurLaneAutoScript
           git -C AzurLaneAutoScript sparse-checkout set deploy
       - name: Distribute
         uses: knicknic/os-specific-run@v1.0.3
@@ -452,13 +450,20 @@ jobs:
             AP-CN-${{ runner.os }}-*
             AzurPilot_Setup_*.exe
 
-  deploy-launcher-update-legacy:
+
+  deploy-launcher-manifest:
+    # 把各平台的启动器二进制与 stable.json 作为 release 资产发布，
+    # 供启动器自更新使用（无需任何自建服务器或 SSH/R2 密钥）。
     if: github.ref_type == 'tag'
     needs: package
     runs-on: ubuntu-latest
-    env:
-      UPDATE_BASE_URL: https://alas.nanoda.work/updata
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
       - name: Download launcher updater payloads
         uses: actions/download-artifact@v4
         with:
@@ -468,6 +473,7 @@ jobs:
       - name: Build stable.json
         env:
           VERSION: ${{ github.ref_name }}
+          REPO: changqing81/alas-launcher
         run: |
           python - <<'PY'
           import datetime
@@ -476,10 +482,12 @@ jobs:
           import os
           from pathlib import Path
 
-          base_url = os.environ["UPDATE_BASE_URL"].rstrip("/")
+          repo = os.environ["REPO"].strip("/")
           version = os.environ["VERSION"].strip()
           if version.startswith("v"):
               version = version[1:]
+
+          base_url = f"https://github.com/{repo}/releases/download/v{version}"
 
           root = Path("launcher-updater")
           files = sorted(
@@ -498,10 +506,9 @@ jobs:
               url_name = name
               if name == "alas-launcher-windows-x86_64.exe":
                   url_name = "alas-launcher.exe"
-              digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
               platforms[key] = {
                   "url": f"{base_url}/{url_name}",
-                  "sha256": digest,
+                  "sha256": hashlib.sha256(file_path.read_bytes()).hexdigest(),
               }
 
           manifest = {
@@ -516,206 +523,21 @@ jobs:
           )
           print(json.dumps(manifest, ensure_ascii=False, indent=2))
           PY
-      - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-      - name: Trust deployment host
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
-      - name: Upload updater files to OpenResty path
+      - name: Upload manifest and payloads to the release
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: /opt/1panel/www/sites/alas.nanoda.work/index/updata
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
-          set -eu
-          REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
-          INCOMING="${DEPLOY_PATH}/.incoming-${GITHUB_RUN_ID}"
-          UPLOAD_DIR="launcher-updater-upload"
-          rm -rf "${UPLOAD_DIR}"
-          mkdir -p "${UPLOAD_DIR}"
-          for file in launcher-updater/alas-launcher-*; do
-            [ -f "${file}" ] || continue
-            filename="$(basename "${file}")"
-            remote_name="${filename}"
-            if [[ "${filename}" == "alas-launcher-windows-x86_64.exe" ]]; then
-              remote_name="alas-launcher.exe"
-            fi
-            cp "${file}" "${UPLOAD_DIR}/${remote_name}"
-          done
-          cp launcher-updater/stable.json "${UPLOAD_DIR}/stable.json"
-          ARCHIVE="launcher-updater-upload.tar.gz"
-          PARTS_DIR="launcher-updater-upload-parts"
-          rm -rf "${ARCHIVE}" "${PARTS_DIR}"
-          tar -C "${UPLOAD_DIR}" -cf - . | gzip -1 > "${ARCHIVE}"
-          mkdir -p "${PARTS_DIR}"
-          split -b 4m -d -a 4 "${ARCHIVE}" "${PARTS_DIR}/part-"
-          ssh -p "${DEPLOY_PORT}" "${REMOTE}" "rm -rf '${INCOMING}' && mkdir -p '${DEPLOY_PATH}' '${INCOMING}/parts' '${INCOMING}/unpack'"
-          find "${PARTS_DIR}" -type f -name 'part-*' -print0 \
-            | xargs -0 -P 8 -I {} sh -c 'part="$1"; scp -q -P "$2" "$part" "$3:$4/parts/$(basename "$part")"' sh "{}" "${DEPLOY_PORT}" "${REMOTE}" "${INCOMING}"
-          ssh -p "${DEPLOY_PORT}" "${REMOTE}" "set -eu
-            cat '${INCOMING}/parts'/part-* | gzip -d | tar -C '${INCOMING}/unpack' -xf -
-          "
-          ssh -p "${DEPLOY_PORT}" "${REMOTE}" "set -eu
-            find '${INCOMING}/unpack' -maxdepth 1 -type f ! -name 'stable.json' -exec mv -f {} '${DEPLOY_PATH}/' \;
-            mv -f '${INCOMING}/unpack/stable.json' '${DEPLOY_PATH}/stable.json'
-            rm -rf '${INCOMING}'
-          "
-
-  deploy-launcher-update:
-    if: github.ref_type == 'tag'
-    needs: package
-    runs-on: ubuntu-latest
-    env:
-      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ${{ secrets.R2_REGION }}
-      R2_BUCKET: ${{ secrets.R2_BUCKET }}
-      R2_PREFIX: ${{ secrets.R2_PREFIX }}
-      R2_REGION: ${{ secrets.R2_REGION }}
-      NEW_UPDATE_URL: https://ap-launcher-update.nanoda.work/updata/stable.json
-      NEW_PAYLOAD_BASE_URL: https://ap-launcher-update-cdn-cn.nanoda.work/updata
-      NEW_MANIFEST_DEPLOY_ROOT: ${{ secrets.NEW_MANIFEST_DEPLOY_ROOT }}
-    steps:
-      - name: Download launcher updater payloads
-        uses: actions/download-artifact@v4
-        with:
-          pattern: launcher-updater-*
-          merge-multiple: true
-          path: launcher-updater
-      - name: Prepare versioned launcher updater payloads
-        env:
-          VERSION: ${{ github.ref_name }}
+          gh release upload "$TAG" launcher-updater/stable.json launcher-updater/alas-launcher-* --clobber
+      - name: Publish manifest to main as a fallback channel
+        # 兜底通路：主地址( release 资产 )不可用时可从 raw 拉到清单。
+        # 分支保护可能拦住这次 push，因此不让它影响发版。
+        continue-on-error: true
         run: |
-          python - <<'PY'
-          import hashlib
-          import datetime
-          import json
-          import os
-          import shutil
-          from pathlib import Path
-
-          version = os.environ["VERSION"].strip()
-          if version.startswith("v"):
-              version = version[1:]
-
-          manifest_url = os.environ["NEW_UPDATE_URL"].rstrip("/")
-          if not manifest_url.endswith("/stable.json"):
-              raise SystemExit("LAUNCHER_NEW_UPDATE_URL must end with /stable.json")
-          base_url = f'{os.environ["NEW_PAYLOAD_BASE_URL"].rstrip("/")}/{version}'
-          source_root = Path("launcher-updater")
-          target_root = Path("launcher-updater-r2")
-          if target_root.exists():
-              shutil.rmtree(target_root)
-          target_root.mkdir(parents=True, exist_ok=True)
-
-          files = sorted(
-              p for p in source_root.glob("alas-launcher-*")
-              if p.is_file() and p.name != "stable.json"
-          )
-          if not files:
-              raise SystemExit("No launcher payloads found in launcher-updater/")
-
-          def versioned_name(name: str) -> str:
-              if name.endswith(".exe"):
-                  return f"{name[:-4]}-{version}.exe"
-              return f"{name}-{version}"
-
-          platforms = {}
-          for file_path in files:
-              name = file_path.name
-              key = name[len("alas-launcher-"):]
-              if key.endswith(".exe"):
-                  key = key[:-4]
-              dest_name = versioned_name(name)
-              dest_path = target_root / dest_name
-              shutil.copy2(file_path, dest_path)
-              digest = hashlib.sha256(dest_path.read_bytes()).hexdigest()
-              platforms[key] = {
-                  "url": f"{base_url}/{dest_name}",
-                  "sha256": digest,
-              }
-
-          manifest = {
-              "version": version,
-              "pub_date": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
-              "notes": f"Launcher auto update {version}",
-              "platforms": platforms,
-          }
-          (target_root / "stable.json").write_text(
-              json.dumps(manifest, ensure_ascii=False, indent=2),
-              encoding="utf-8",
-          )
-          print(f"Publishing mTLS manifest to {manifest_url}")
-          print(json.dumps(manifest, ensure_ascii=False, indent=2))
-          PY
-      - name: Upload versioned payloads to R2
-        run: |
-          set -eu
-          version="${GITHUB_REF_NAME#v}"
-          root="launcher-updater-r2"
-          for file in "${root}"/alas-launcher-*; do
-            [ -f "${file}" ] || continue
-            name="$(basename "${file}")"
-            aws s3 cp "${file}" "s3://${R2_BUCKET}/${R2_PREFIX}/${version}/${name}" \
-              --endpoint-url "${R2_ENDPOINT}" \
-              --region "${R2_REGION}" \
-              --cache-control "public, max-age=31536000, immutable" \
-              --only-show-errors
-          done
-      - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-      - name: Trust deployment host
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
-      - name: Upload new manifest to OpenResty path
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.NEW_MANIFEST_DEPLOY_ROOT }}/updata
-        run: |
-          set -eu
-          REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
-          ssh -p "${DEPLOY_PORT}" "${REMOTE}" "sudo -n mkdir -p '${DEPLOY_PATH}' && sudo -n chown '${DEPLOY_USER}' '${DEPLOY_PATH}'"
-          scp -q -P "${DEPLOY_PORT}" launcher-updater-r2/stable.json "${REMOTE}:${DEPLOY_PATH}/stable.json"
-      - name: Delete superseded R2 payload versions
-        env:
-          VERSION: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          version="${VERSION#v}"
-          r2_prefix="${R2_PREFIX%/}"
-          current_prefix="${r2_prefix}/${version}/"
-          version_prefixes="$(
-            aws s3api list-objects-v2 \
-              --bucket "${R2_BUCKET}" \
-              --prefix "${r2_prefix}/" \
-              --delimiter "/" \
-              --endpoint-url "${R2_ENDPOINT}" \
-              --region "${R2_REGION}" \
-              --query 'CommonPrefixes[].Prefix' \
-              --output text
-          )"
-          [ -n "${version_prefixes}" ] || exit 0
-          printf '%s\n' "${version_prefixes}" | tr '\t' '\n' | while IFS= read -r version_prefix; do
-            [ -n "${version_prefix}" ] || continue
-            [ "${version_prefix}" = "None" ] && continue
-            [ "${version_prefix}" = "${current_prefix}" ] && continue
-            case "${version_prefix}" in
-              "${r2_prefix}/"*/) ;;
-              *) echo "Refusing to delete unexpected R2 prefix: ${version_prefix}" >&2; exit 1 ;;
-            esac
-            aws s3 rm "s3://${R2_BUCKET}/${version_prefix}" \
-              --recursive \
-              --endpoint-url "${R2_ENDPOINT}" \
-              --region "${R2_REGION}" \
-              --only-show-errors
-          done
+          mkdir -p updata
+          cp launcher-updater/stable.json updata/stable.json
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updata/stable.json
+          git commit -m "ci: update updata/stable.json [skip ci]" || echo "no changes to commit"
+          git push origin HEAD:main
