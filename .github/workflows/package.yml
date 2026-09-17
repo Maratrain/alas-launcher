@@ -503,11 +503,10 @@ jobs:
               key = name[len("alas-launcher-"):]
               if key.endswith(".exe"):
                   key = key[:-4]
-              url_name = name
-              if name == "alas-launcher-windows-x86_64.exe":
-                  url_name = "alas-launcher.exe"
               platforms[key] = {
-                  "url": f"{base_url}/{url_name}",
+                  # 资产名必须与实际上传的文件名完全一致
+                  # （例如 alas-launcher-windows-x86_64.exe），否则这里会指向 404。
+                  "url": f"{base_url}/{name}",
                   "sha256": hashlib.sha256(file_path.read_bytes()).hexdigest(),
               }
 
