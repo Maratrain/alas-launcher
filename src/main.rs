@@ -1571,9 +1571,15 @@ mod tests {
     fn test_splash_includes_optional_uv_progress() {
         let html = splash_redesigned_shell_html("video", "font");
 
+        assert!(html.contains("data:video/mp4;base64,video"));
         assert!(html.contains("id=\"uv-progress-container\""));
         assert!(html.contains("payload.uv_progress"));
         assert!(html.contains("id=\"uv-progress-detail\""));
+        assert!(html.contains("grid-template-columns: minmax(0, 1fr) auto"));
+        assert!(html.contains("background: rgba(250, 250, 247, 0.78)"));
+        assert!(html.contains("content: \"✦\""));
+        assert!(!html.contains("'Tips: ' + subtitle.tip"));
+        assert!(!html.contains("animation: sweep"));
     }
 
     #[test]
@@ -1617,7 +1623,19 @@ mod tests {
             assert!(titlebar_script.contains("-webkit-app-region:no-drag"));
             assert!(titlebar_script.contains("webviewDraggableRegionsEnabled"));
             assert!(titlebar_script.contains("if (webviewDraggableRegionsEnabled)"));
-            assert!(titlebar_script.contains("min-height:12px"));
+            assert!(titlebar_script.contains(
+                ".alas-titlebar-drag-zone{position:absolute;inset:0 148px 0 0;height:100%;pointer-events:none"
+            ));
+            assert!(titlebar_script.contains(".alas-titlebar-drag-segment{"));
+            assert!(titlebar_script.contains("const rebuildDragSegments = () =>"));
+            assert!(titlebar_script.contains("getComputedStyle(element).cursor !== 'pointer'"));
+            assert!(titlebar_script.contains("dragZone.replaceChildren(fragment)"));
+            assert!(titlebar_script.contains("min-height:28px"));
+            assert!(titlebar_script.contains("background:rgba(250,250,247,.78)"));
+            assert!(titlebar_script.contains(".icon-close{color:#e64f58}"));
+            assert!(titlebar_script.contains("--alas-titlebar-height:56px"));
+            assert!(titlebar_script.contains("transform:translateY(-6px) scale(.96)"));
+            assert!(!titlebar_script.contains("scale(.72)"));
             assert!(titlebar_script.contains("alas-close-menu"));
             assert!(!titlebar_script.contains("alas-close-optics"));
             assert!(!titlebar_script.contains("alas-island-open"));
@@ -3550,8 +3568,8 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
     display: flex;
     justify-content: space-between;
     align-items: center;
-    min-height: 60px;
-    padding: 18px 24px;
+    min-height: 56px;
+    padding: 10px 18px;
     touch-action: none;
     app-region: drag;
     -webkit-app-region: drag;
@@ -3583,28 +3601,27 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
   .top-right {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 8px;
     min-width: 0;
   }
   .status-badge {
     max-width: 260px;
-    min-height: 28px;
+    min-height: 32px;
     display: inline-flex;
     align-items: center;
     gap: 7px;
     border-radius: 999px;
-    padding: 6px 14px;
-    color: var(--text-main);
-    background: var(--surface-soft);
-    border: 1px solid var(--surface-border);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+    padding: 6px 13px;
+    color: #394451;
+    background: rgba(250, 250, 247, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(16px) saturate(1.2);
+    box-shadow: 0 4px 14px rgba(61, 79, 97, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.36);
     font-size: 12px;
     font-weight: 460;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    animation: pulse 2.2s ease-in-out infinite;
   }
   .status-badge::before {
     content: "";
@@ -3618,7 +3635,14 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
   .window-controls {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 2px;
+    min-height: 36px;
+    padding: 3px 4px;
+    border: 1px solid rgba(255, 255, 255, 0.92);
+    border-radius: 18px;
+    background: rgba(250, 250, 247, 0.78);
+    box-shadow: 0 4px 14px rgba(61, 79, 97, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.36);
+    backdrop-filter: blur(16px) saturate(1.2);
     flex: 0 0 auto;
     app-region: no-drag;
     -webkit-app-region: no-drag;
@@ -3628,44 +3652,43 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
     -webkit-app-region: no-drag;
   }
   .win-btn {
-    width: 13px;
-    height: 13px;
+    width: 28px;
+    height: 28px;
     border: 0;
-    border-radius: 50%;
+    border-radius: 12px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     padding: 0;
-    transition: filter 140ms ease, transform 140ms ease;
+    color: #727b86;
+    background: transparent;
+    transition: transform 140ms cubic-bezier(.23, 1, .32, 1), background-color 140ms ease, color 140ms ease;
   }
   .win-btn:hover {
-    filter: brightness(1.07);
-    transform: scale(1.04);
+    color: #202832;
+    background: rgba(255, 255, 255, 0.72);
   }
   .win-btn:active {
-    filter: brightness(0.9);
-    transform: scale(0.97);
+    transform: scale(0.96);
   }
   .win-btn svg {
-    width: 7px;
-    height: 7px;
-    stroke: rgba(50, 42, 35, 0.72);
-    stroke-width: 1.45;
+    width: 11px;
+    height: 11px;
+    stroke: currentColor;
+    stroke-width: 1.35;
     stroke-linecap: round;
-    opacity: 0;
-    transition: opacity 140ms ease;
-  }
-  .window-controls:hover .win-btn svg {
     opacity: 1;
   }
   .win-btn.minimize {
-    background: var(--warning);
-    box-shadow: 0 0 0 0.5px rgba(156, 110, 6, 0.55);
+    color: #727b86;
   }
   .win-btn.close {
-    background: var(--danger);
-    box-shadow: 0 0 0 0.5px rgba(160, 32, 28, 0.55);
+    color: #e64f58;
+  }
+  .win-btn.close:hover {
+    color: #b5202e;
+    background: rgba(244, 91, 91, 0.15);
   }
   .main-content {
     position: relative;
@@ -3727,34 +3750,35 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
     white-space: pre-line;
   }
   .progress-container {
-    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
     margin-bottom: 15px;
   }
   .progress-bar-bg {
+    grid-column: 1;
+    grid-row: 1;
     width: 100%;
-    height: 6px;
+    height: 5px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.2);
     overflow: hidden;
-    backdrop-filter: blur(5px);
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.12);
+    backdrop-filter: blur(8px);
   }
   .progress-bar-fill {
     width: 4%;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-    box-shadow: 0 0 14px rgba(0, 242, 254, 0.5);
+    background: linear-gradient(90deg, #4facfe, #43d7f5);
+    box-shadow: 0 0 10px rgba(67, 215, 245, 0.38);
     position: relative;
     overflow: hidden;
-    transition: width 0.35s ease, background 0.2s ease;
+    transition: width 0.35s cubic-bezier(.23, 1, .32, 1), background-color 0.2s ease;
   }
   .progress-bar-fill::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.48), transparent);
-    transform: translateX(-100%);
-    animation: sweep 2s ease-in-out infinite;
+    display: none;
   }
   .progress-bar-fill-error {
     background: linear-gradient(90deg, #ff5f57, #ffbd2e);
@@ -3764,14 +3788,15 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
     display: none;
   }
   .progress-percentage {
-    position: absolute;
-    right: 0;
-    top: -25px;
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 34px;
     color: var(--text-main);
-    font-size: 14px;
-    font-weight: 680;
+    font-size: 12px;
+    font-weight: 560;
+    text-align: right;
     font-variant-numeric: tabular-nums;
-    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.32);
+    text-shadow: 0 1px 5px rgba(0, 0, 0, 0.28);
   }
   .uv-progress-container {
     display: none;
@@ -3804,7 +3829,7 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
     height: 4px;
     overflow: hidden;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.14);
   }
   .uv-progress-bar-fill {
     position: relative;
@@ -3812,17 +3837,12 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
     height: 100%;
     overflow: hidden;
     border-radius: inherit;
-    background: linear-gradient(90deg, #77e7a4, #47b8ff);
-    box-shadow: 0 0 10px rgba(71, 184, 255, 0.42);
-    transition: width 0.45s ease;
+    background: #55cda0;
+    box-shadow: 0 0 8px rgba(85, 205, 160, 0.34);
+    transition: width 0.4s cubic-bezier(.23, 1, .32, 1);
   }
   .uv-progress-bar-fill::after {
-    position: absolute;
-    inset: 0;
-    content: "";
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.42), transparent);
-    transform: translateX(-100%);
-    animation: sweep 1.8s ease-in-out infinite;
+    display: none;
   }
   .footer-info {
     display: flex;
@@ -3833,18 +3853,29 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
     font-size: 12px;
   }
   .tip-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     min-width: 0;
     max-width: 520px;
     color: var(--text-sub);
-    background: rgba(0, 0, 0, 0.16);
-    border-left: 3px solid var(--primary-color);
-    border-radius: 4px;
-    padding: 5px 12px;
+    background: rgba(15, 23, 42, 0.26);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 12px;
+    padding: 7px 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 460;
-    backdrop-filter: blur(7px);
+    backdrop-filter: blur(12px) saturate(1.1);
+  }
+  .tip-text::before {
+    content: "✦";
+    color: var(--primary-color);
+    font-size: 12px;
+    line-height: 1;
+    text-shadow: 0 0 10px rgba(79, 172, 254, 0.55);
+    flex: 0 0 auto;
   }
   .footer-right {
     display: flex;
@@ -3865,19 +3896,24 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
     display: block;
   }
   .splash-log-button {
-    min-height: 28px;
-    border: 1px solid rgba(255, 255, 255, 0.28);
-    border-radius: 6px;
-    padding: 0 11px;
-    color: var(--text-main);
-    background: rgba(255, 255, 255, 0.14);
-    backdrop-filter: blur(10px);
+    min-height: 34px;
+    border: 1px solid rgba(255, 255, 255, 0.78);
+    border-radius: 12px;
+    padding: 0 14px;
+    color: #394451;
+    background: rgba(250, 250, 247, 0.78);
+    box-shadow: 0 4px 14px rgba(61, 79, 97, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.36);
+    backdrop-filter: blur(14px) saturate(1.15);
     cursor: pointer;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 560;
+    transition: transform 140ms cubic-bezier(.23, 1, .32, 1), background-color 140ms ease;
   }
   .splash-log-button:hover {
-    background: rgba(255, 255, 255, 0.23);
+    background: rgba(255, 255, 255, 0.9);
+  }
+  .splash-log-button:active {
+    transform: scale(0.97);
   }
   .splash-log-button:disabled {
     cursor: default;
@@ -3892,11 +3928,14 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
     box-shadow: 0 0 12px rgba(255, 95, 87, 0.76);
   }
   body.error-state .tip-text {
-    border-left-color: #ffbd2e;
+    border-color: rgba(255, 189, 46, 0.42);
+  }
+  body.error-state .tip-text::before {
+    color: #ffbd2e;
   }
   @media (max-width: 720px) {
     .top-bar {
-      padding: 16px 20px;
+      padding: 10px 16px;
     }
     .status-badge {
       max-width: 180px;
@@ -3941,13 +3980,6 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
   }
   @keyframes spin {
     to { transform: rotate(360deg); }
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 0.9; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.015); box-shadow: 0 0 18px rgba(255, 255, 255, 0.18); }
-  }
-  @keyframes sweep {
-    to { transform: translateX(200%); }
   }
 </style>
 </head>
@@ -4004,7 +4036,7 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
       </div>
 
       <div class="footer-info">
-        <div id="tip-text" class="tip-text">Tips: $I18N_DEFAULT_TIP</div>
+        <div id="tip-text" class="tip-text">$I18N_DEFAULT_TIP</div>
         <div class="footer-right">
           <div id="progress-meta" class="notice-text">$I18N_PROGRESS_META</div>
           <div id="splash-actions" class="splash-actions">
@@ -4199,7 +4231,7 @@ fn splash_redesigned_shell_html(video_bg_b64: &str, mi_sans_font_b64: &str) -> S
       }
 
       badgeText.textContent = payload.is_error ? i18n.errorBadge : subtitle.status;
-      document.getElementById('tip-text').textContent = 'Tips: ' + subtitle.tip;
+      document.getElementById('tip-text').textContent = subtitle.tip;
       document.getElementById('title').textContent = payload.title || i18n.starting;
       document.getElementById('detail').textContent = normalizeDetail(payload.detail);
       progressMeta.textContent = payload.is_error
@@ -4531,13 +4563,13 @@ fn main_window_titlebar_injection_script() -> String {
             if (!document.getElementById('alas-launcher-titlebar-style')) {
                 const style = document.createElement('style');
                 style.id = 'alas-launcher-titlebar-style';
-                style.textContent = ':root{--alas-titlebar-height:44px}#alas-launcher-titlebar{position:fixed;top:0;left:0;right:0;height:var(--alas-titlebar-height);z-index:2147483647;user-select:none;pointer-events:none;background:transparent}#alas-launcher-titlebar *{box-sizing:border-box}.alas-titlebar-drag-zone{position:absolute;inset:0 120px 0 0;height:100%;pointer-events:auto;background:transparent;touch-action:none;app-region:drag;-webkit-app-region:drag}.header-icon,.header-icon *{app-region:no-drag;-webkit-app-region:no-drag}.header-icon{display:flex;align-items:center;gap:8px;padding:0 12px;position:absolute;top:0;right:0;height:100%;pointer-events:auto}.icon{width:12px;height:12px;min-width:12px;min-height:12px;margin:0;padding:0;line-height:1;border-radius:50%;border:none;cursor:pointer;flex:0 0 auto;position:relative;transition:filter 120ms ease;display:inline-flex;align-items:center;justify-content:center}.icon:active{filter:brightness(0.85)}.icon-hide{background:#3b82f6;box-shadow:0 0 0 .5px #2563eb}.icon-close{background:#ff5f57;box-shadow:0 0 0 .5px #e0443e}.icon-minimize{background:#febc2e;box-shadow:0 0 0 .5px #d4a017}.icon-maximize{background:#28c840;box-shadow:0 0 0 .5px #14ae35}.icon svg{width:7px;height:7px;stroke:rgba(0,0,0,.72);fill:none;stroke-width:1.35;stroke-linecap:round;stroke-linejoin:round;opacity:0;transition:opacity 150ms ease}.header-icon:hover .icon svg{opacity:1}@media(max-width:680px){.alas-titlebar-drag-zone{inset-right:88px}}';
-                style.textContent += '#alas-close-menu{position:fixed;top:8px;right:8px;z-index:2147483647;width:244px;padding:11px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:rgba(22,25,31,.92);box-shadow:0 18px 46px rgba(0,0,0,.3);backdrop-filter:blur(18px) saturate(1.25);-webkit-backdrop-filter:blur(18px) saturate(1.25);color:#fff;opacity:0;pointer-events:none;transform:translateY(-14px) scale(.72);transform-origin:calc(100% - 16px) 18px;transition:opacity 160ms ease,transform 220ms cubic-bezier(.2,.9,.25,1);app-region:no-drag;-webkit-app-region:no-drag}#alas-close-menu.is-open{opacity:1;pointer-events:auto;transform:translateY(0) scale(1)}#alas-close-menu *{box-sizing:border-box;app-region:no-drag;-webkit-app-region:no-drag}#alas-close-menu-title{margin:0 0 10px;font:500 12px/1.45 "MiSans",sans-serif;color:rgba(255,255,255,.78)}#alas-close-menu-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}#alas-close-menu button{display:flex;align-items:center;justify-content:center;min-width:0;min-height:34px;margin:0;padding:0 10px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:rgba(255,255,255,.1);color:#fff;font:600 12px/1 "MiSans",sans-serif;cursor:pointer;transition:background 120ms ease,transform 120ms ease}#alas-close-menu button:hover{transform:translateY(-1px);background:rgba(255,255,255,.18)}#alas-close-menu button:active{transform:translateY(0)}#alas-close-menu button:disabled{opacity:.55;cursor:default;transform:none}#alas-close-menu .alas-close-confirm{border-color:rgba(255,113,106,.38);background:rgba(202,56,52,.82)}#alas-close-menu .alas-close-confirm:hover{background:rgba(225,68,63,.94)}';
+                style.textContent = ':root{--alas-titlebar-height:56px}#alas-launcher-titlebar{position:fixed;top:0;left:0;right:0;height:var(--alas-titlebar-height);z-index:2147483647;user-select:none;pointer-events:none;background:transparent}#alas-launcher-titlebar *{box-sizing:border-box}.alas-titlebar-drag-zone{position:absolute;inset:0 148px 0 0;height:100%;pointer-events:none;background:transparent;touch-action:none}.alas-titlebar-drag-segment{position:absolute;top:0;bottom:0;pointer-events:auto;background:transparent;touch-action:none;app-region:drag;-webkit-app-region:drag}.header-icon,.header-icon *{app-region:no-drag;-webkit-app-region:no-drag}.header-icon{display:flex;align-items:center;gap:3px;padding:3px 4px;position:absolute;top:10px;right:10px;height:36px;pointer-events:auto;border:1px solid rgba(255,255,255,.92);border-radius:18px;background:rgba(250,250,247,.78);box-shadow:0 4px 14px rgba(61,79,97,.1),inset 0 1px 0 rgba(255,255,255,.36);backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2)}.icon{width:28px;height:28px;min-width:28px;min-height:28px;margin:0;padding:0;line-height:1;border-radius:12px;border:none;background:transparent;color:#727b86;cursor:pointer;flex:0 0 auto;position:relative;transition:transform 140ms cubic-bezier(.23,1,.32,1),background-color 140ms ease,color 140ms ease;display:inline-flex;align-items:center;justify-content:center}.icon:hover{color:#202832;background:rgba(255,255,255,.72)}.icon:active{transform:scale(.96)}.icon-close{color:#e64f58}.icon-close:hover{color:#b5202e;background:rgba(244,91,91,.15)}.icon svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round;opacity:1}';
+                style.textContent += '#alas-close-menu{position:fixed;top:8px;right:10px;z-index:2147483647;width:272px;padding:14px;border:1px solid rgba(255,255,255,.9);border-radius:20px;background:rgba(250,250,247,.94);box-shadow:0 18px 46px rgba(46,58,72,.2),inset 0 1px 0 rgba(255,255,255,.7);backdrop-filter:blur(20px) saturate(1.18);-webkit-backdrop-filter:blur(20px) saturate(1.18);color:#202832;opacity:0;pointer-events:none;transform:translateY(-6px) scale(.96);transform-origin:calc(100% - 64px) 0;transition:opacity 140ms ease,transform 180ms cubic-bezier(.23,1,.32,1);app-region:no-drag;-webkit-app-region:no-drag}#alas-close-menu.is-open{opacity:1;pointer-events:auto;transform:translateY(0) scale(1)}#alas-close-menu *{box-sizing:border-box;app-region:no-drag;-webkit-app-region:no-drag}#alas-close-menu-title{margin:0 0 12px;font:500 13px/1.55 "MiSans",sans-serif;color:rgba(32,40,50,.82)}#alas-close-menu-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}#alas-close-menu button{display:flex;align-items:center;justify-content:center;min-width:0;min-height:36px;margin:0;padding:0 12px;border:1px solid rgba(92,105,120,.16);border-radius:11px;background:rgba(105,118,133,.08);color:#394451;font:600 12px/1 "MiSans",sans-serif;cursor:pointer;transition:background-color 140ms ease,color 140ms ease,transform 140ms cubic-bezier(.23,1,.32,1)}#alas-close-menu button:hover{transform:translateY(-1px);background:rgba(105,118,133,.14)}#alas-close-menu button:active{transform:scale(.98)}#alas-close-menu button:disabled{opacity:.55;cursor:default;transform:none}#alas-close-menu .alas-close-confirm{border-color:rgba(205,62,69,.28);background:#d94b4b;color:#fff}#alas-close-menu .alas-close-confirm:hover{background:#c93e3e;color:#fff}';
                 document.head.appendChild(style);
             }
             const titlebar = document.createElement('div');
             titlebar.id = 'alas-launcher-titlebar';
-            titlebar.innerHTML = '<div class="alas-titlebar-drag-zone" aria-hidden="true"></div><div class="header-icon"><button type="button" class="icon icon-hide" data-action="hide" aria-label="'+i18n.hideLabel+'" title="'+i18n.hideLabel+'"><svg viewBox="0 0 6 6"><rect x="1" y="1" width="4" height="4" rx="1"/><path d="M2 3h2"/></svg></button><button type="button" class="icon icon-minimize" data-action="minimize" aria-label="'+i18n.minimizeLabel+'" title="'+i18n.minimizeTitle+'"><svg viewBox="0 0 6 6"><line x1="1" y1="3" x2="5" y2="3"/></svg></button><button type="button" class="icon icon-maximize" data-action="maximize" aria-label="'+i18n.maximizeLabel+'" title="'+i18n.maximizeTitle+'"><svg viewBox="0 0 6 6" class="svg-restore" style="display:none"><polyline points="1,3 1,1 3,1"/><polyline points="3,5 5,5 5,3"/></svg><svg viewBox="0 0 6 6" class="svg-maximize"><polyline points="1,2.5 1,1 2.5,1"/><polyline points="3.5,5 5,5 5,3.5"/></svg></button><button type="button" class="icon icon-close" data-action="close" aria-label="'+i18n.closeLabel+'" title="'+i18n.closeTitle+'"><svg viewBox="0 0 6 6"><line x1="1" y1="1" x2="5" y2="5"/><line x1="5" y1="1" x2="1" y2="5"/></svg></button></div>';
+            titlebar.innerHTML = '<div class="alas-titlebar-drag-zone" aria-hidden="true"><div class="alas-titlebar-drag-segment" style="left:0;right:0"></div></div><div class="header-icon"><button type="button" class="icon icon-hide" data-action="hide" aria-label="'+i18n.hideLabel+'" title="'+i18n.hideLabel+'"><svg viewBox="0 0 6 6"><rect x="1" y="1" width="4" height="4" rx="1"/><path d="M2 3h2"/></svg></button><button type="button" class="icon icon-minimize" data-action="minimize" aria-label="'+i18n.minimizeLabel+'" title="'+i18n.minimizeTitle+'"><svg viewBox="0 0 6 6"><line x1="1" y1="3" x2="5" y2="3"/></svg></button><button type="button" class="icon icon-maximize" data-action="maximize" aria-label="'+i18n.maximizeLabel+'" title="'+i18n.maximizeTitle+'"><svg viewBox="0 0 6 6" class="svg-restore" style="display:none"><polyline points="1,3 1,1 3,1"/><polyline points="3,5 5,5 5,3"/></svg><svg viewBox="0 0 6 6" class="svg-maximize"><polyline points="1,2.5 1,1 2.5,1"/><polyline points="3.5,5 5,5 5,3.5"/></svg></button><button type="button" class="icon icon-close" data-action="close" aria-label="'+i18n.closeLabel+'" title="'+i18n.closeTitle+'"><svg viewBox="0 0 6 6"><line x1="1" y1="1" x2="5" y2="5"/><line x1="5" y1="1" x2="1" y2="5"/></svg></button></div>';
             document.body.dataset.alasCustomTitlebar = 'true';
             document.body.prepend(titlebar);
             const dragZone = titlebar.querySelector('.alas-titlebar-drag-zone');
@@ -4586,6 +4618,61 @@ fn main_window_titlebar_injection_script() -> String {
             document.addEventListener('keydown', event => {
                 if (event.key === 'Escape' && closeMenu.classList.contains('is-open')) setCloseMenuOpen(false);
             });
+            const interactiveSelector = 'a[href],button,input,select,textarea,summary,label[for],[role="button"],[role="link"],[contenteditable="true"],[tabindex]:not([tabindex="-1"]),[onclick]';
+            const rebuildDragSegments = () => {
+                const dragRect = dragZone.getBoundingClientRect();
+                const dragWidth = Math.max(0, dragRect.width);
+                const exclusions = [];
+                document.body.querySelectorAll('*').forEach(element => {
+                    if (titlebar.contains(element) || element.closest('#alas-close-menu')) return;
+                    const rect = element.getBoundingClientRect();
+                    if (rect.width <= 0 || rect.height <= 0 || rect.bottom <= dragRect.top || rect.top >= dragRect.bottom || rect.right <= dragRect.left || rect.left >= dragRect.right) return;
+                    if (!element.matches(interactiveSelector) && getComputedStyle(element).cursor !== 'pointer') return;
+                    const left = Math.max(0, Math.floor(rect.left - dragRect.left) - 3);
+                    const right = Math.min(dragWidth, Math.ceil(rect.right - dragRect.left) + 3);
+                    if (right > left) exclusions.push([left, right]);
+                });
+                exclusions.sort((a, b) => a[0] - b[0]);
+                const merged = [];
+                exclusions.forEach(interval => {
+                    const previous = merged[merged.length - 1];
+                    if (previous && interval[0] <= previous[1]) previous[1] = Math.max(previous[1], interval[1]);
+                    else merged.push(interval);
+                });
+                const fragment = document.createDocumentFragment();
+                const appendSegment = (left, right) => {
+                    if (right - left < 4) return;
+                    const segment = document.createElement('div');
+                    segment.className = 'alas-titlebar-drag-segment';
+                    segment.style.left = left + 'px';
+                    segment.style.width = (right - left) + 'px';
+                    fragment.appendChild(segment);
+                };
+                let cursor = 0;
+                merged.forEach(interval => {
+                    appendSegment(cursor, interval[0]);
+                    cursor = Math.max(cursor, interval[1]);
+                });
+                appendSegment(cursor, dragWidth);
+                dragZone.replaceChildren(fragment);
+            };
+            let dragSegmentFrame = 0;
+            const scheduleDragSegmentRebuild = () => {
+                cancelAnimationFrame(dragSegmentFrame);
+                dragSegmentFrame = requestAnimationFrame(rebuildDragSegments);
+            };
+            const dragSegmentObserver = new MutationObserver(mutations => {
+                if (mutations.some(mutation => !titlebar.contains(mutation.target))) scheduleDragSegmentRebuild();
+            });
+            dragSegmentObserver.observe(document.body, {
+                subtree: true,
+                childList: true,
+                characterData: true,
+                attributes: true,
+                attributeFilter: ['class', 'style', 'hidden', 'disabled', 'href', 'role', 'tabindex'],
+            });
+            document.addEventListener('scroll', scheduleDragSegmentRebuild, { capture: true, passive: true });
+            rebuildDragSegments();
             const syncMaximizeState = async () => {
                 if (!maximizeButton) return;
                 try {
@@ -4625,7 +4712,7 @@ fn main_window_titlebar_injection_script() -> String {
                 try { await invoke('window_toggle_maximize'); await syncMaximizeState(); }
                 catch (error) { console.error('Failed to toggle maximize from titlebar', error); }
             });
-            window.addEventListener('resize', () => { void syncMaximizeState(); });
+            window.addEventListener('resize', () => { scheduleDragSegmentRebuild(); void syncMaximizeState(); });
             void syncMaximizeState();
         };
         ensureTitlebar();
