@@ -93,7 +93,7 @@ const LAUNCHER_UPDATE_URL: &str = env!("LAUNCHER_UPDATE_URL");
 // 兜底清单地址：主地址（release 资产）取不到时再试这个。
 // 由 CI 在发版时把 stable.json 一并提交回 main 分支，作为冗余通路。
 const LAUNCHER_UPDATE_FALLBACK_URL: &str =
-    "https://raw.githubusercontent.com/changqing81/alas-launcher/main/updata/stable.json";
+    "https://raw.githubusercontent.com/Maratrain/alas-launcher/main/updata/stable.json";
 const LAUNCHER_UPDATE_SKIP_ENV: &str = "AZURPILOT_SKIP_LAUNCHER_UPDATE";
 const MINI_LAUNCHER_VERSION: &str = "0.0.1";
 const LAUNCHER_UPDATE_MTLS_IDENTITY: &[u8] =

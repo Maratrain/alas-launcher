@@ -148,7 +148,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Build
         env:
-          LAUNCHER_UPDATE_URL: https://github.com/changqing81/alas-launcher/releases/latest/download/stable.json
+          LAUNCHER_UPDATE_URL: https://github.com/Maratrain/alas-launcher/releases/latest/download/stable.json
         run: cargo build --verbose --release
       - name: Get git
         uses: knicknic/os-specific-run@v1.0.3
@@ -213,7 +213,7 @@ jobs:
             tar -xvf adb.zip
       - name: Get AzurPilot
         run: |
-          git clone --depth=1 --filter=blob:none --sparse --branch master https://github.com/changqing81/Azurpilot-Auto.git AzurLaneAutoScript
+          git clone --depth=1 --filter=blob:none --sparse --branch master https://github.com/Maratrain/AzurPilot.git AzurLaneAutoScript
           git -C AzurLaneAutoScript sparse-checkout set deploy
       - name: Distribute
         uses: knicknic/os-specific-run@v1.0.3
@@ -476,7 +476,7 @@ jobs:
       - name: Build stable.json
         env:
           VERSION: ${{ github.ref_name }}
-          REPO: changqing81/alas-launcher
+          REPO: Maratrain/alas-launcher
         run: |
           python - <<'PY'
           import datetime

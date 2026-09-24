@@ -10,7 +10,7 @@ const LAUNCHER_UPDATE_URL_ENV: &str = "LAUNCHER_UPDATE_URL";
 // 而清单内容随每个 tag 更新 —— 正好满足「编译进二进制的地址必须固定」的要求。
 // 每次发版必须确保 stable.json 已作为 release 资产上传，否则这里会 404。
 const DEFAULT_LAUNCHER_UPDATE_URL: &str =
-    "https://github.com/changqing81/alas-launcher/releases/latest/download/stable.json";
+    "https://github.com/Maratrain/alas-launcher/releases/latest/download/stable.json";
 
 fn main() {
     let windows = tauri_build::WindowsAttributes::new().app_manifest(
