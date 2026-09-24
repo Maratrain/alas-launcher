@@ -1,23 +1,23 @@
 {
   "version": "1.0.0",
-  "pub_date": "2026-09-24T16:56:12.966364Z",
+  "pub_date": "2026-09-24T18:27:50.163964Z",
   "notes": "Launcher auto update 1.0.0",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://github.com/Maratrain/alas-launcher/releases/download/1.0.0/alas-launcher-darwin-aarch64",
-      "sha256": "2d71511010bb3e233b8e2be091ca15c9ac512e3b05df597cc84080d81c14e4e0"
+      "sha256": "dfc48fd347c5246702d236f8519829af030ccedbca445ad1e93f36b32f9d3401"
     },
     "linux-x86_64": {
       "url": "https://github.com/Maratrain/alas-launcher/releases/download/1.0.0/alas-launcher-linux-x86_64",
-      "sha256": "08b6f7a35e9702cdcd65c4aea290ff29e760d532c4b0ad0744b442fbce5825ed"
+      "sha256": "0e03e42f0fd7fa860f2e4b9dcb5c9ece3e57c9439956aa5275c1d10c2e6d7bd1"
     },
     "windows-aarch64": {
       "url": "https://github.com/Maratrain/alas-launcher/releases/download/1.0.0/alas-launcher-windows-aarch64.exe",
-      "sha256": "a9dec41e2d9a22501719ab15c2fa28a0955f75ee3fcb22dcc94a41f7e8976095"
+      "sha256": "cd6dea7a5c6b0485929e249aea9caa413d86f56220e59ab1fc8cb54fefe11456"
     },
     "windows-x86_64": {
       "url": "https://github.com/Maratrain/alas-launcher/releases/download/1.0.0/alas-launcher-windows-x86_64.exe",
-      "sha256": "c7baeac3c2581cd8ce4ff760618ac4fc40db39979df297f73348c8bc77913cf0"
+      "sha256": "7e3e072a3bfacbb0884889bf75c871b52b3adb827784b383d8c6074618d5ea70"
     }
   }
 }
