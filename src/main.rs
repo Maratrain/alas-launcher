@@ -51,7 +51,7 @@ use reqwest::{
 };
 use rust_i18n::t;
 use serde::Deserialize;
-use serde_json::to_string;
+use serde_json::{to_string, Value as JsonValue};
 use sha2::{Digest, Sha256};
 use tauri::{
     image::Image,
@@ -1327,6 +1327,23 @@ fn preview_no_update_arg_present() -> bool {
     launcher_arg_present(PREVIEW_NO_UPDATE_ARGS)
 }
 
+/// 读取部署设置中的"启动时跳过仓库更新"（Deploy.Git.SkipRepositoryUpdate）。
+/// 该设置与命令行 no-update 参数等效，但仅跳过主程序仓库拉取，不影响启动器自更新检查。
+fn deploy_skip_repository_update(config: Option<&JsonValue>) -> bool {
+    config
+        .and_then(|config| config.get("Deploy"))
+        .and_then(|deploy| deploy.get("Git"))
+        .and_then(|git| git.get("SkipRepositoryUpdate"))
+        .and_then(|value| {
+            value.as_bool().or_else(|| {
+                value
+                    .as_str()
+                    .map(|s| matches!(s.to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on"))
+            })
+        })
+        .unwrap_or(false)
+}
+
 fn preview_crash_arg_present() -> bool {
     launcher_arg_present(PREVIEW_CRASH_ARGS)
 }
@@ -1937,6 +1954,34 @@ mod tests {
         assert!(!failed_part_path.exists());
         assert!(!failed_update_path.exists());
     }
+
+    #[test]
+    fn test_deploy_skip_repository_update_reads_flag() {
+        let config: JsonValue = serde_json::from_str(
+            r#"{ "Deploy": { "Git": { "SkipRepositoryUpdate": true } } }"#,
+        )
+        .unwrap();
+        assert!(deploy_skip_repository_update(Some(&config)));
+
+        let config: JsonValue = serde_json::from_str(
+            r#"{ "Deploy": { "Git": { "SkipRepositoryUpdate": false } } }"#,
+        )
+        .unwrap();
+        assert!(!deploy_skip_repository_update(Some(&config)));
+
+        // 字符串形式的布尔值（poor_yaml 兼容）
+        let config: JsonValue = serde_json::from_str(
+            r#"{ "Deploy": { "Git": { "SkipRepositoryUpdate": "true" } } }"#,
+        )
+        .unwrap();
+        assert!(deploy_skip_repository_update(Some(&config)));
+
+        // 缺失字段 / 缺失文件时保持默认关闭
+        let config: JsonValue =
+            serde_json::from_str(r#"{ "Deploy": { "Git": {} } }"#).unwrap();
+        assert!(!deploy_skip_repository_update(Some(&config)));
+        assert!(!deploy_skip_repository_update(None));
+    }
 }
 
 /// Set macOS activation policy to Regular (show in dock) or Accessory (hide from dock).
@@ -2066,6 +2111,11 @@ fn main() -> Result<()> {
         warn!("config/deploy.yaml not found or invalid, using default WebUI launch config");
     }
     let port = webui_config.port;
+    let skip_repository_update = preview_no_update
+        || deploy_skip_repository_update(deploy_config.as_ref());
+    if skip_repository_update && !preview_no_update {
+        info!("部署设置 SkipRepositoryUpdate 已启用；本次启动将跳过仓库更新");
+    }
 
     let backend = Arc::new(Mutex::new(None));
     let allow_exit = Arc::new(AtomicBool::new(false));
@@ -2361,7 +2411,7 @@ fn main() -> Result<()> {
                         if let Err(e) = setup_alas_repo(
                             &mut status_updater,
                             setup_cancel_requested.clone(),
-                            preview_no_update,
+                            skip_repository_update,
                         ) {
                             error!("{e}");
                             setup_running.store(false, Ordering::SeqCst);

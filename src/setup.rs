@@ -394,15 +394,25 @@ pub fn setup_alas_repo(
     atomic_failure_cleanup("./config", &cancel_requested)?;
     migrate_dependency_config()?;
     if skip_repository_update {
-        info!("Skipping AzurPilot repository update because preview no-update mode is enabled");
-        status_updater(
-            SplashUpdate::loading(
-                t!("setup.skipping_update"),
-                t!("setup.skipping_update_detail"),
-                18,
-            )
-            .with_subtitle(t!("setup.preview_mode", tip = get_tip())),
-        );
+        // 首次安装时本地还没有仓库，跳过更新会让后续依赖安装失败，此时忽略跳过设置。
+        if Path::new(".git").exists() {
+            info!("已跳过 AzurPilot 仓库更新，使用本地代码继续启动");
+            status_updater(
+                SplashUpdate::loading(
+                    t!("setup.skipping_update"),
+                    t!("setup.skipping_update_detail"),
+                    18,
+                )
+                .with_subtitle(t!("setup.skipping_update_subtitle", tip = get_tip())),
+            );
+        } else {
+            info!("本地仓库不存在，忽略跳过更新设置，执行首次拉取");
+            status_updater(
+                SplashUpdate::loading(t!("setup.updating"), t!("setup.fetching_patches"), 18)
+                    .with_subtitle(t!("setup.syncing", tip = get_tip())),
+            );
+            git_update(&mut status_updater, &bootstrap_uv, &cancel_requested)?;
+        }
     } else {
         status_updater(
             SplashUpdate::loading(t!("setup.updating"), t!("setup.fetching_patches"), 18)
